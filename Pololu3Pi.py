@@ -56,14 +56,14 @@ class App:
         self.sensorLabel = Label(self.sensorFrame, text="Sensors Value:")
         self.sensorLabel.grid(row=0, column=0, columnspan=2)
         # Creating labels
-        sensorListKeys = ['Status', 'Bateria', 'Czujnik #1', 'Czujnik #2', 'Czujnik #3', 'Czujnik #4', 'Czujnik #5']
+        self.sensorListKeys = ['Status', 'Bateria', 'Czujnik #1', 'Czujnik #2', 'Czujnik #3', 'Czujnik #4', 'Czujnik #5']
         for r in range(7):
             for c in range(2):
                 self.e = Entry(self.sensorFrame, width=21, justify="center", cursor="arrow")
                 self.e.grid(row=r + 1, column=c)
                 if (c % 2 != 0):
                     continue
-                self.e.insert(END, sensorListKeys[r])
+                self.e.insert(END, self.sensorListKeys[r])
                 self.e.configure(state="disabled", disabledforeground="black")
         # Ip init
         self.ipRobota = None
@@ -74,6 +74,10 @@ class App:
     # Disconect button
     def Disconect(self):
         if self.ipRobota is not None:
+            self.my_socket.send(b"[000000]")
+            recvData = self.my_socket.recv(1024).decode()
+            self.DecodeSensorValues(recvData)
+            self.UpdateTableData()
             self.my_socket.close()
             self.ipFrame.after_cancel(self.transsmissionLoop)
             self.ipRobota = None
@@ -90,6 +94,11 @@ class App:
             tkinter.messagebox.showinfo("Connection Status", "Wrong ip!")
         else:
             if self.ipRobota is not None:
+                self.StopMotors()
+                self.my_socket.send(b"[000000]")
+                recvData = self.my_socket.recv(1024).decode()
+                self.DecodeSensorValues(recvData)
+                self.UpdateTableData()
                 self.my_socket.close()
                 self.ipFrame.after_cancel(self.transsmissionLoop)
             # ipRobota = "192.168.2." + str(koncowkaIp)
@@ -115,6 +124,7 @@ class App:
         recvData = self.my_socket.recv(1024).decode()
         # Now i need to decode sensor values
         self.DecodeSensorValues(recvData)
+        self.UpdateTableData()
         print(recvData)
         self.transsmissionLoop = self.ipFrame.after(1000, self.DataTransmission)
 
@@ -169,7 +179,7 @@ class App:
 
     # Decode sensor values
     def DecodeSensorValues(self, recvData):
-        self.sensorValues = dict()
+        self.sensorValues = list()
         # Status data
         statusData = int("0x" + recvData[1:3], base=16)
         # print(statusData)
@@ -191,15 +201,21 @@ class App:
         # Sensor #5
         fifthSensor = int("0x" + recvData[25:27] + recvData[23:25], base=16)
         # print("0x" + recvData[23:27])
-        self.sensorValues['Status'] = statusData
-        self.sensorValues['Bateria'] = batteryStatus
-        self.sensorValues['Czujnik #1'] = firstSensor
-        self.sensorValues['Czujnik #2'] = secondSensor
-        self.sensorValues['Czujnik #3'] = thirdSensor
-        self.sensorValues['Czujnik #4'] = fourthSensor
-        self.sensorValues['Czujnik #5'] = fifthSensor
-        # for k, v in self.sensorValues.items():
-        #     print(k, v)
+        self.sensorValues = [statusData, batteryStatus, firstSensor, secondSensor, thirdSensor, fourthSensor, fifthSensor]
+
+    # Update data in table
+    def UpdateTableData(self):
+        for r in range(7):
+            for c in range(2):
+                self.e = Entry(self.sensorFrame, width=21, justify="center", cursor="arrow")
+                self.e.grid(row=r + 1, column=c)
+                if (c % 2 != 0):
+                    self.e.delete(END)
+                    self.e.insert(END, self.sensorValues[r])
+                    continue
+                self.e.delete(END)
+                self.e.insert(END, self.sensorListKeys[r])
+                self.e.configure(state="disabled", disabledforeground="black")
 
 
 if __name__ == "__main__":
