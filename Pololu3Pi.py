@@ -36,7 +36,7 @@ class App:
         # Drive backward 128 - 255
         # Sliders Frame
         self.slidersFrame = Frame(master)
-        self.slidersFrame.place(x=60, y=105)
+        self.slidersFrame.place(x=55, y=105)
         # Slider for left motor control
         # intvalue for control
         self.leftMotorValue = IntVar()
@@ -50,9 +50,37 @@ class App:
         # Button for stop motors (set value to 0)
         self.stopButton = Button(self.slidersFrame, text="Stop motors", width=20, bg="#A00000", activebackground="#FF0000", fg="#FFFF00", command=self.StopMotors)
         self.stopButton.grid(column=0, row=1, columnspan=2)
+        # Creating table for visualize sensor data
+        self.sensorFrame = Frame(master)
+        self.sensorFrame.place(x=0, y=236)
+        self.sensorLabel = Label(self.sensorFrame, text="Sensors Value:")
+        self.sensorLabel.grid(row=0, column=0, columnspan=2)
+        # Creating labels
+        sensorListKeys = ['Status', 'Bateria', 'Czujnik #1', 'Czujnik #2', 'Czujnik #3', 'Czujnik #4', 'Czujnik #5']
+        for r in range(7):
+            for c in range(2):
+                self.e = Entry(self.sensorFrame, width=21, justify="center", cursor="arrow")
+                self.e.grid(row=r + 1, column=c)
+                if (c % 2 != 0):
+                    continue
+                self.e.insert(END, sensorListKeys[r])
+                self.e.configure(state="disabled", disabledforeground="black")
+        # Ip init
+        self.ipRobota = None
+        # Create button for disconecting
+        self.disconectButton = Button(self.sensorFrame, text="Disconect", width=20, bg="#A00000", activebackground="#FF0000", fg="#FFFF00", command=self.Disconect)
+        self.disconectButton.grid(row=8, column=0, columnspan=2)
+
+    # Disconect button
+    def Disconect(self):
+        if self.ipRobota is not None:
+            self.my_socket.close()
+            self.ipFrame.after_cancel(self.transsmissionLoop)
+            self.ipRobota = None
 
     # Connect button
     def ConnectionButton(self):
+
         try:
             koncowkaIp = int(self.ipEntry.get())
         except ValueError:
@@ -61,24 +89,34 @@ class App:
         if koncowkaIp is None or not (30 < koncowkaIp < 40):
             tkinter.messagebox.showinfo("Connection Status", "Wrong ip!")
         else:
+            if self.ipRobota is not None:
+                self.my_socket.close()
+                self.ipFrame.after_cancel(self.transsmissionLoop)
             # ipRobota = "192.168.2." + str(koncowkaIp)
             # For now Im gonna use local ip for testing
-            ipRobota = "127.0.0.1"
+            self.ipRobota = "127.0.0.1"
             port = 8000
             # print(ipRobota)
-            my_socket.connect((ipRobota, port))
-            # start data transmission
-            self.DataTransmission()
+            # Create a Socket
+            self.my_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            try:
+                self.my_socket.connect((self.ipRobota, port))
+                # start data transmission
+                self.DataTransmission()
+            except ConnectionRefusedError:
+                tkinter.messagebox.showinfo("Connection Status", "Connection refused!")
 
     # Data transmission
     def DataTransmission(self):
         robotControlData = self.DataCalc()
-        my_socket.send(bytes(robotControlData.encode()))
+        self.my_socket.send(bytes(robotControlData.encode()))
         # print(robotControlData)
         time.sleep(1)
-        self.recvdata = my_socket.recv(1024).decode()
-        print(self.recvdata)
-        self.ipFrame.after(1000, self.DataTransmission)
+        recvData = self.my_socket.recv(1024).decode()
+        # Now i need to decode sensor values
+        self.DecodeSensorValues(recvData)
+        print(recvData)
+        self.transsmissionLoop = self.ipFrame.after(1000, self.DataTransmission)
 
     # Calculating data
     def DataCalc(self):
@@ -129,16 +167,47 @@ class App:
         self.sliderLeftMotor.set(0)
         self.sliderRightMotor.set(0)
 
+    # Decode sensor values
+    def DecodeSensorValues(self, recvData):
+        self.sensorValues = dict()
+        # Status data
+        statusData = int("0x" + recvData[1:3], base=16)
+        # print(statusData)
+        # Battery status
+        batteryStatus = int("0x" + recvData[5:7] + recvData[3:5], base=16)
+        # print(batteryStatus)
+        # Sensor #1
+        firstSensor = int("0x" + recvData[9:11] + recvData[7:9], base=16)
+        # print("0x" + recvData[7:11])
+        # Sensor #2
+        secondSensor = int("0x" + recvData[13:15] + recvData[11:13], base=16)
+        # print("0x" + recvData[11:15])
+        # Sensor #3
+        thirdSensor = int("0x" + recvData[17:19] + recvData[15:17], base=16)
+        # print("0x" + recvData[15:19])
+        # Sensor #4
+        fourthSensor = int("0x" + recvData[21:23] + recvData[19:21], base=16)
+        # print("0x" + recvData[19:23])
+        # Sensor #5
+        fifthSensor = int("0x" + recvData[25:27] + recvData[23:25], base=16)
+        # print("0x" + recvData[23:27])
+        self.sensorValues['Status'] = statusData
+        self.sensorValues['Bateria'] = batteryStatus
+        self.sensorValues['Czujnik #1'] = firstSensor
+        self.sensorValues['Czujnik #2'] = secondSensor
+        self.sensorValues['Czujnik #3'] = thirdSensor
+        self.sensorValues['Czujnik #4'] = fourthSensor
+        self.sensorValues['Czujnik #5'] = fifthSensor
+        # for k, v in self.sensorValues.items():
+        #     print(k, v)
+
 
 if __name__ == "__main__":
-    # Create a Socket
-    my_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     # Making window root
     root = Tk()
     root.title('Pololu3Pi')
-    root.geometry('800x500')
+    root.geometry('255x420')
     root.configure(bg='#dddddd')
     # calling gui
     app = App(root)
     root.mainloop()
-    my_socket.close()
